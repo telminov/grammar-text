@@ -1,0 +1,5 @@
+.idea
+MANIFEST
+build/
+dist/
+virt_env
