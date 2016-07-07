@@ -1,0 +1,7 @@
+.phrase {
+    position: absolute;
+    background-color: lightgray;
+    margin: 6px 0 6px 6px;
+    border: 1px solid silver;
+    padding: 1px 5px;
+}
