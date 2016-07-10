@@ -11,6 +11,51 @@ createSuggestElement = (position) ->
     return el
 
 
+grammarInputPrepare = (grammar) ->
+
+    grammar.input.keydown (event) ->
+        console.log 'grammar', event.keyCode
+
+        # backspace
+        if event.keyCode == 8
+            # если что-то есть в поле ввода, то не реагиуем
+            if grammar.input.val()
+                return
+
+            selectedPhraseElement = grammar.getSelectedPhraseElement()
+            if selectedPhraseElement
+                grammar.removePhrase(selectedPhraseElement)
+            else
+                grammar.selectLastPhrase()
+
+        # Del
+        else if event.keyCode == 46
+            # если что-то есть в поле ввода, то не реагиуем
+            if grammar.input.val()
+                return
+
+            selectedPhraseElement = grammar.getSelectedPhraseElement()
+            if selectedPhraseElement
+                grammar.removePhrase(selectedPhraseElement)
+
+
+        # Left
+        else if event.keyCode == 37
+            # если что-то есть в поле ввода, то не реагиуем
+            if grammar.input.val()
+                return
+
+            grammar.moveSelectionLeft()
+
+        # Right
+        else if event.keyCode == 39
+            # если что-то есть в поле ввода, то не реагиуем
+            if grammar.input.val()
+                return
+
+            grammar.moveSelectionRight()
+
+
 suggestInputPrepare = (suggest) ->
     suggest.input.attr('autocomplete', 'off');
 
@@ -27,6 +72,8 @@ suggestInputPrepare = (suggest) ->
         )
 
     suggest.input.keydown (event) ->
+#        console.log 'suggest', event.keyCode
+
         # Enter
         if event.keyCode == 13
             event.preventDefault()
@@ -55,8 +102,8 @@ suggestInputPrepare = (suggest) ->
 
 
 getLeftPadding = (input) ->
-    rowInputPadding = input.css('padding-left')
-    inputPadding = Number(rowInputPadding.substring(0, rowInputPadding.length-2))   # избавимся от "px" в конце
+    rawInputPadding = input.css('padding-left')
+    inputPadding = Number(rawInputPadding.substring(0, rawInputPadding.length-2))   # избавимся от "px" в конце
     return inputPadding
 
 
@@ -157,38 +204,154 @@ class Suggest
 class @GrammarText
     constructor: (input, @phrasesUrl) ->
         this.input = $(input)
+
         this.phrases = []
         this.suggestPhrases = []
         this.selectedPhrases = []
+
         this.suggest = new Suggest(this.input, this.suggestPhrases)
         this.suggest.addSelectHandler((phrase) => this.renderPhrase(phrase))
 
+        this.phraseElements = []
+        grammarInputPrepare(this)
+
     loadPhrases: ->
         $.get this.phrasesUrl, (result) =>
-            # все фразы
             for phrase in result
                 this.phrases.push(phrase)
+            this.refreshSuggestPhrases()
 
-            # еще не выбранные
-            for phrase in this.phrases
-                if _.indexOf(this.selectedPhrases, {text: phrase.text}) == -1
-                    this.suggestPhrases.push(phrase)
+    clearSelection: ->
+        for phraseElement in this.phraseElements
+            phraseElement.removeClass('selected')
 
     renderPhrase: (phrase) ->
+        this.clearSelection()
+
+        # положение поля ввода
         position = this.input.offset()
         inputPadding = getLeftPadding(this.input)
         position.left += inputPadding
 
-        # нарисуем фразу
+        # нарисуем поверх него фразу
         phraseElement = createPhraseElement(phrase, position)
+        this.phraseElements.push(phraseElement)
 
-        # подвинем input
+        # подвинем текс в input'е
         inputPadding = getLeftPadding(this.input)
         phrasePadding = phraseElement.outerWidth(true)
         newInputPadding = inputPadding + phrasePadding
         this.input.css('padding-left', newInputPadding)
 
+        # сохраним отрисованную фразу
         this.selectedPhrases.push(phrase)
-        _.remove(this.suggestPhrases, {text: phrase.text})
+
+        # удалим из списка доступных для автокомплита фразу
+        this.refreshSuggestPhrases()
+
+        this.selectLastPhrase()
+
+    getSelectedPhraseElement: ->
+        for phraseElement in this.phraseElements
+            if phraseElement.hasClass('selected')
+                return phraseElement
+
+    getSelectedPhraseIndex: ->
+        selectedPhraseElement = this.getSelectedPhraseElement()
+
+        if not selectedPhraseElement
+            return
+
+        index = this.phraseElements.indexOf(selectedPhraseElement)
+        if index == -1
+            return
+
+        return index
+
+    removePhrase: (phraseElement) ->
+        deleteIndex = undefined
+        for el, i in this.phraseElements
+            if el.text() == phraseElement.text()
+                deleteIndex = i
+                break
+        if deleteIndex == undefined
+            return
+
+        this.phraseElements.splice(deleteIndex, 1)
+
+        # уменьшим сдвиг поля ввода
+        phrasePadding = phraseElement.outerWidth(true)
+        inputPadding = getLeftPadding(this.input)
+        newInputPadding = inputPadding - phrasePadding
+        this.input.css('padding-left', newInputPadding)
+
+        # подвинем другие фразы
+        for el in this.phraseElements.slice(deleteIndex)
+#            console.log deleteIndex, el.text(), el.css('left')
+            rawLeft = el.css('left')
+            left = Number(rawLeft.substring(0, rawLeft.length-2)) - phrasePadding
+            el.css('left', left)
+
+        # удалим фразу из выбранных
+        _.remove(this.selectedPhrases, {text: phraseElement.text()})
+
+        phraseElement.remove()
+
+        this.refreshSuggestPhrases()
+        this.suggest.refresh()
+
+        # поставим выделение на друзую фразу
+        if deleteIndex > 0
+            selectedIndex = deleteIndex-1
+        else
+            selectedIndex = 0
+#        console.log this.phraseElements
+        this.selectPhraseByIndex(selectedIndex)
+
+
+    selectLastPhrase: ->
+        if not this.phraseElements.length
+            return
+        lastPhraseElement = this.phraseElements[this.phraseElements.length-1]
+        lastPhraseElement.addClass('selected')
+
+    selectPhraseByIndex: (index) ->
+        if not this.phraseElements.length
+            return
+        phraseElement = this.phraseElements[index]
+        phraseElement.addClass('selected')
+
+    moveSelectionLeft: ->
+        index = this.getSelectedPhraseIndex()
+
+        if index > 0
+            index -= 1
+        else
+            index = 0
+
+        this.clearSelection()
+        this.selectPhraseByIndex(index)
+
+    moveSelectionRight: ->
+        lastIndex = this.phraseElements.length - 1
+        index = this.getSelectedPhraseIndex()
+
+        if index < lastIndex
+            index += 1
+        else
+            index = lastIndex
+
+        this.clearSelection()
+        this.selectPhraseByIndex(index)
+
+    refreshSuggestPhrases: ->
+        this.suggestPhrases.length = 0
+        for phrase in this.phrases
+            selected = false
+            for selectedPhrase in this.selectedPhrases
+                if selectedPhrase.text == phrase.text
+                    selected = true
+            if not selected
+                this.suggestPhrases.push(phrase)
 
 
