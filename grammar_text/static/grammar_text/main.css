@@ -20,7 +20,13 @@
 }
 
 .suggest ul li {
-  padding-left: 5px;
+    padding-left: 5px;
+    cursor: pointer;
+    width: 100%;
+}
+
+.suggest ul li:hover {
+    background-color: lightsteelblue;
 }
 
 .suggest ul li.selected {
