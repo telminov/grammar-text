@@ -23,7 +23,7 @@ suggestInputPrepare = (suggest) ->
             ->
                 if not suggest.input.is(':focus')
                     suggest.close()
-            100
+            200     # 200 мс достаточно чтобы успел отработать клик мыши
         )
 
     suggest.input.keydown (event) ->
@@ -45,6 +45,13 @@ suggestInputPrepare = (suggest) ->
         else if event.keyCode == 38
             suggest.open()
             suggest.moveSelectedUp()
+
+        else
+            setTimeout(
+                -> suggest.refresh()
+                10
+            )
+
 
 
 getLeftPadding = (input) ->
@@ -90,14 +97,25 @@ class Suggest
 
         this.element.find('.choices li, .no-items').remove()
 
-        if this.phrases.length
-            for phrase in this.phrases
+        # отфильтруем фразы по введенному тексту в инпут
+        phrases = []
+        for phrase in this.phrases
+            filterText = this.input.val().toLowerCase()
+            phraseText = phrase.text.toLowerCase()
+            if phraseText.indexOf(filterText) == 0
+                phrases.push(phrase)
+
+        if phrases.length
+            # отрисуем фразы
+            for phrase in phrases
                 phraseElement = $("<li>#{ phrase.text }</li>")
                 phraseElement.data(phrase)
                 phraseElement.click (event) =>
                     this.select($(event.target).data())
                     this.input.focus()
                 this.element.find('.choices').append(phraseElement)
+            # выберем первый элемент
+            this.element.find('.choices li').first().addClass('selected')
         else
             this.element.append('<div class="no-items">Нет элементов для выбора...</div>')
 
@@ -108,6 +126,7 @@ class Suggest
         for handler in this.selectHandlers
             handler(phrase)
 
+        this.input.val('')
         this.refresh()
 
     useSelected: ->

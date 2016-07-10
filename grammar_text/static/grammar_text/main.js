@@ -28,7 +28,7 @@
         if (!suggest.input.is(':focus')) {
           return suggest.close();
         }
-      }, 100);
+      }, 200);
     });
     return suggest.input.keydown(function(event) {
       if (event.keyCode === 13) {
@@ -42,6 +42,10 @@
       } else if (event.keyCode === 38) {
         suggest.open();
         return suggest.moveSelectedUp();
+      } else {
+        return setTimeout(function() {
+          return suggest.refresh();
+        }, 10);
       }
     });
   };
@@ -54,9 +58,9 @@
   };
 
   Suggest = (function() {
-    function Suggest(input1, phrases) {
+    function Suggest(input1, phrases1) {
       this.input = input1;
-      this.phrases = phrases;
+      this.phrases = phrases1;
       this.selectHandlers = [];
       this.isOpened = false;
       suggestInputPrepare(this);
@@ -86,16 +90,24 @@
     };
 
     Suggest.prototype.refresh = function() {
-      var i, len, phrase, phraseElement, ref, results;
+      var filterText, i, j, len, len1, phrase, phraseElement, phraseText, phrases, ref;
       if (!this.isOpened) {
         return;
       }
       this.element.find('.choices li, .no-items').remove();
-      if (this.phrases.length) {
-        ref = this.phrases;
-        results = [];
-        for (i = 0, len = ref.length; i < len; i++) {
-          phrase = ref[i];
+      phrases = [];
+      ref = this.phrases;
+      for (i = 0, len = ref.length; i < len; i++) {
+        phrase = ref[i];
+        filterText = this.input.val().toLowerCase();
+        phraseText = phrase.text.toLowerCase();
+        if (phraseText.indexOf(filterText) === 0) {
+          phrases.push(phrase);
+        }
+      }
+      if (phrases.length) {
+        for (j = 0, len1 = phrases.length; j < len1; j++) {
+          phrase = phrases[j];
           phraseElement = $("<li>" + phrase.text + "</li>");
           phraseElement.data(phrase);
           phraseElement.click((function(_this) {
@@ -104,9 +116,9 @@
               return _this.input.focus();
             };
           })(this));
-          results.push(this.element.find('.choices').append(phraseElement));
+          this.element.find('.choices').append(phraseElement);
         }
-        return results;
+        return this.element.find('.choices li').first().addClass('selected');
       } else {
         return this.element.append('<div class="no-items">Нет элементов для выбора...</div>');
       }
@@ -123,6 +135,7 @@
         handler = ref[i];
         handler(phrase);
       }
+      this.input.val('');
       return this.refresh();
     };
 
