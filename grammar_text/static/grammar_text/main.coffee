@@ -8,46 +8,56 @@ createSuggestElement = (position) ->
 grammarInputPrepare = (grammar) ->
 
     grammar.input.keydown (event) ->
-#        console.log 'grammar', event.keyCode
+        console.log 'grammar', event.keyCode
 
-        # backspace
-        if event.keyCode == 8
+        if event.keyCode == 37
             # если что-то есть в поле ввода, то не реагиуем
             if grammar.input.val()
                 return
 
-            selectedPhraseElement = grammar.getSelectedPhraseElement()
-            if selectedPhraseElement
-                grammar.removePhrase(selectedPhraseElement)
-            else
-                grammar.selectLastPhrase()
+            grammar.selectLastPhrase()
 
-        # Del
-        else if event.keyCode == 46
-            # если что-то есть в поле ввода, то не реагиуем
-            if grammar.input.val()
-                return
+        else
+            grammar.clearSelection()
 
-            selectedPhraseElement = grammar.getSelectedPhraseElement()
-            if selectedPhraseElement
-                grammar.removePhrase(selectedPhraseElement)
-
-
-        # Left
-        else if event.keyCode == 37
-            # если что-то есть в поле ввода, то не реагиуем
-            if grammar.input.val()
-                return
-
-            grammar.moveSelectionLeft()
-
-        # Right
-        else if event.keyCode == 39
-            # если что-то есть в поле ввода, то не реагиуем
-            if grammar.input.val()
-                return
-
-            grammar.moveSelectionRight()
+#        # backspace
+#        if event.keyCode == 8
+#            # если что-то есть в поле ввода, то не реагиуем
+#            if grammar.input.val()
+#                return
+#
+#            selectedPhraseElement = grammar.getSelectedPhraseElement()
+#            if selectedPhraseElement
+#                grammar.removePhrase(selectedPhraseElement)
+#            else
+#                grammar.selectLastPhrase()
+#
+#        # Del
+#        else if event.keyCode == 46
+#            # если что-то есть в поле ввода, то не реагиуем
+#            if grammar.input.val()
+#                return
+#
+#            selectedPhraseElement = grammar.getSelectedPhraseElement()
+#            if selectedPhraseElement
+#                grammar.removePhrase(selectedPhraseElement)
+#
+#
+#        # Left
+#        else if event.keyCode == 37
+#            # если что-то есть в поле ввода, то не реагиуем
+#            if grammar.input.val()
+#                return
+#
+#            grammar.moveSelectionLeft()
+#
+#        # Right
+#        else if event.keyCode == 39
+#            # если что-то есть в поле ввода, то не реагиуем
+#            if grammar.input.val()
+#                return
+#
+#            grammar.moveSelectionRight()
 
 
 suggestInputPrepare = (suggest) ->
@@ -199,17 +209,61 @@ class Suggest
         prevElement.addClass('selected')
 
 
+PHRASE_MOVE_LEFT_EVENT = 'PHRASE_MOVE_LEFT'
+PHRASE_MOVE_RIGHT_EVENT = 'PHRASE_MOVE_RIGHT'
+PHRASE_REMOVE_EVENT = 'PHRASE_REMOVE'
+
 class PhraseElement
     constructor: (@phrase, position) ->
-        this.el = $("<div class='phrase'>#{ this.phrase.text }</div>")
+        this.hasParams = this.phrase.text.indexOf('_') != -1
+
+        contentHtml = this.phrase.text
+        contentHtml = contentHtml.replace(/_/g, "<input></input>")
+        this.el = $("<div tabindex='0' class='phrase'>#{ contentHtml }</div>")
+        if not this.hasParams
+            this.el.addClass('no-params')
+
         this.el.appendTo('body')
         this.el.css(position)
+        this.width = this.el.outerWidth(true)
+
+        this.el.blur =>
+            this.deselect(true)
+
+        this.el.keydown (event) =>
+            console.log 'PhraseElement', event.keyCode
+
+            # Left
+            if event.keyCode == 37
+                this.moveSelectionLeft()
+            # Right
+            else if event.keyCode == 39
+                this.moveSelectionRight()
+            # Del
+            else if event.keyCode == 46
+                this.moveSelectionRight()
+                this.remove()
+            # backspace
+            else if event.keyCode == 8
+                this.moveSelectionLeft()
+                this.remove()
+
+        this.el.click =>
+            this.select()
+
+#    getId: ->
+#        return "phrase_#{ this.phrase.id }"
 
     select: ->
         this.el.addClass('selected')
+        this.el.focus()
 
-    deselect: ->
+    deselect: (noBlur)->
         this.el.removeClass('selected')
+
+        doBlur = !noBlur
+        if doBlur
+            this.el.blur()
 
     isSelected: ->
         return this.el.hasClass('selected')
@@ -218,7 +272,7 @@ class PhraseElement
         return this.phrase.text
 
     getWidth: ->
-        return this.el.outerWidth(true)
+        return this.width
 
     getLeftPosition: ->
         rawLeft = this.el.css('left')
@@ -230,6 +284,18 @@ class PhraseElement
 
     remove: ->
         this.el.remove()
+        e = $.Event(PHRASE_REMOVE_EVENT, {phraseElement: this})
+        $(this).trigger(e)
+
+    moveSelectionLeft: ->
+        this.deselect()
+        e = $.Event(PHRASE_MOVE_LEFT_EVENT, {phraseElement: this})
+        $(this).trigger(e)
+
+    moveSelectionRight: ->
+        this.deselect()
+        e = $.Event(PHRASE_MOVE_RIGHT_EVENT, {phraseElement: this})
+        $(this).trigger(e)
 
 
 class @GrammarText
@@ -263,9 +329,13 @@ class @GrammarText
         position = this.input.offset()
         inputPadding = getLeftPadding(this.input)
         position.left += inputPadding
+        position.top -= 4
 
         # нарисуем поверх него фразу
         phraseElement = new PhraseElement(phrase, position)
+        $(phraseElement).bind(PHRASE_MOVE_LEFT_EVENT, (e) => this.moveLeftHandler(e))
+        $(phraseElement).bind(PHRASE_MOVE_RIGHT_EVENT, (e) => this.moveRightHandler(e))
+        $(phraseElement).bind(PHRASE_REMOVE_EVENT, (e) => this.removePhraseHandler(e))
         this.phraseElements.push(phraseElement)
 
         # подвинем текс в input'е
@@ -280,7 +350,7 @@ class @GrammarText
         # удалим из списка доступных для автокомплита фразу
         this.refreshSuggestPhrases()
 
-        this.selectLastPhrase()
+#        this.selectLastPhrase()
 
     getSelectedPhraseElement: ->
         for phraseElement in this.phraseElements
@@ -299,14 +369,102 @@ class @GrammarText
 
         return index
 
-    removePhrase: (phraseElement) ->
-        deleteIndex = undefined
-        for el, i in this.phraseElements
-            if el.getText() == phraseElement.getText()
-                deleteIndex = i
+    getPhraseIndex: (phrase) ->
+        selectedIndex = undefined
+        for phraseElement, i in this.phraseElements
+            if phrase.text == phraseElement.getText()
+                selectedIndex = i
                 break
-        if deleteIndex == undefined
+        return selectedIndex
+
+    selectLastPhrase: ->
+        if not this.phraseElements.length
             return
+        lastPhraseElement = this.phraseElements[this.phraseElements.length-1]
+        lastPhraseElement.select()
+        console.log 'selectLastPhrase', lastPhraseElement
+
+
+    selectPhraseByIndex: (index) ->
+        if not this.phraseElements.length
+            return
+        phraseElement = this.phraseElements[index]
+        phraseElement.select()
+
+#    moveSelectionLeft: ->
+#        index = this.getSelectedPhraseIndex()
+#
+#        if index == undefined
+#            index = this.phraseElements.length - 1
+#        else if index > 0
+#            index -= 1
+#        else
+#            index = 0
+#
+#        this.clearSelection()
+#        this.selectPhraseByIndex(index)
+#
+#    moveSelectionRight: ->
+#        lastIndex = this.phraseElements.length - 1
+#        index = this.getSelectedPhraseIndex()
+#
+#        if index == undefined
+#            index = 0
+##        else if index < lastIndex
+##            index += 1
+#        else
+##            index = lastIndex
+#            index += 1
+#
+#        this.clearSelection()
+#        if index < lastIndex
+##            this.input.blur()
+#            this.selectPhraseByIndex(index)
+##        else
+##            this.input.focus()
+
+    refreshSuggestPhrases: ->
+        this.suggestPhrases.length = 0
+        for phrase in this.phrases
+            selected = false
+            for selectedPhrase in this.selectedPhrases
+                if selectedPhrase.text == phrase.text
+                    selected = true
+            if not selected
+                this.suggestPhrases.push(phrase)
+
+
+    moveLeftHandler: (e) ->
+        phrase = e.phraseElement.phrase
+        phraseIndex = this.getPhraseIndex(phrase)
+
+        nextIndex = phraseIndex - 1
+        if nextIndex < 0
+            nextIndex = 0
+
+        nextPhraseElement = this.phraseElements[nextIndex]
+        nextPhraseElement.select()
+
+    moveRightHandler: (e) ->
+        phrase = e.phraseElement.phrase
+        phraseIndex = this.getPhraseIndex(phrase)
+
+        nextIndex = phraseIndex + 1
+        lastIndex = this.phraseElements.length - 1
+
+        if nextIndex <= lastIndex
+            nextPhraseElement = this.phraseElements[nextIndex]
+            nextPhraseElement.select()
+        else
+            this.input.focus()
+
+    removePhraseHandler: (e) ->
+        phraseElement = e.phraseElement
+
+        deleteIndex = this.getPhraseIndex(phraseElement.phrase)
+        console.log 'removePhraseHandler deleteIndex', deleteIndex
+#        if deleteIndex == undefined
+#            return
 
         this.phraseElements.splice(deleteIndex, 1)
 
@@ -324,63 +482,17 @@ class @GrammarText
         # удалим фразу из выбранных
         _.remove(this.selectedPhrases, {text: phraseElement.getText()})
 
-        phraseElement.remove()
-
         this.refreshSuggestPhrases()
         this.suggest.refresh()
 
-        # поставим выделение на друзую фразу
-        if deleteIndex > 0
-            selectedIndex = deleteIndex-1
-        else
-            selectedIndex = 0
-#        console.log this.phraseElements
-        this.selectPhraseByIndex(selectedIndex)
-
-
-    selectLastPhrase: ->
         if not this.phraseElements.length
-            return
-        lastPhraseElement = this.phraseElements[this.phraseElements.length-1]
-        lastPhraseElement.select()
-
-    selectPhraseByIndex: (index) ->
-        if not this.phraseElements.length
-            return
-        phraseElement = this.phraseElements[index]
-        phraseElement.select()
-
-    moveSelectionLeft: ->
-        index = this.getSelectedPhraseIndex()
-
-        if index > 0
-            index -= 1
-        else
-            index = 0
-
-        this.clearSelection()
-        this.selectPhraseByIndex(index)
-
-    moveSelectionRight: ->
-        lastIndex = this.phraseElements.length - 1
-        index = this.getSelectedPhraseIndex()
-
-        if index < lastIndex
-            index += 1
-        else
-            index = lastIndex
-
-        this.clearSelection()
-        this.selectPhraseByIndex(index)
-
-    refreshSuggestPhrases: ->
-        this.suggestPhrases.length = 0
-        for phrase in this.phrases
-            selected = false
-            for selectedPhrase in this.selectedPhrases
-                if selectedPhrase.text == phrase.text
-                    selected = true
-            if not selected
-                this.suggestPhrases.push(phrase)
+            this.input.focus()
 
 
+#        # поставим выделение на друзую фразу
+#        if deleteIndex > 0
+#            selectedIndex = deleteIndex-1
+#        else
+#            selectedIndex = 0
+##        console.log this.phraseElements
+#        this.selectPhraseByIndex(selectedIndex)
