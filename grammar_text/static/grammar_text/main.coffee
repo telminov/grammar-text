@@ -188,6 +188,7 @@ PHRASE_MOVE_LEFT_EVENT = 'PHRASE_MOVE_LEFT'
 PHRASE_MOVE_RIGHT_EVENT = 'PHRASE_MOVE_RIGHT'
 PHRASE_REMOVE_EVENT = 'PHRASE_REMOVE'
 PHRASE_SELECTED_EVENT = 'PHRASE_SELECTED'
+PHRASE_WIDTH_CHANGED_EVENT = 'PHRASE_WIDTH_CHANGED'
 
 class PhraseElement
     constructor: (@phrase, position) ->
@@ -343,6 +344,38 @@ class PhraseElement
         $(this).trigger(e)
         return true
 
+    _setInputFocus: ->
+        if this.lastFocusedInput
+            this.lastFocusedInput.focus()
+            return
+
+        inputs = this.el.find("input")
+        for input in inputs
+            input = $(input)
+            # фокус на первый пустой инпут
+            if not input.val()
+                input.focus()
+                return
+        # если пустых нет, то на последний
+        input.focus()
+
+    _renderInputs: ->
+        inputs = this.el.find("input")
+        for input in inputs
+            input = $(input)
+            # расширим поле, чтобы было видно ровно столько символов, сколько ввели
+            # для этого создадим временный элемент (без этого при удалении символов scrollWidth не уменьшается)
+            tmpInput = $("<input style='width:10px' value='#{ input.val() }' />").appendTo('body')
+            scrollWidth = tmpInput.prop('scrollWidth')
+            tmpInput.remove()
+            input.width(scrollWidth)
+
+        newWidth = this.el.outerWidth(true)
+        if newWidth != this.width
+            this.width = newWidth
+            e = $.Event(PHRASE_WIDTH_CHANGED_EVENT, {phraseElement: this})
+            $(this).trigger(e)
+
 
 class @GrammarText
     constructor: (input, @phrasesUrl) ->
@@ -382,6 +415,7 @@ class @GrammarText
         $(phraseElement).bind(PHRASE_MOVE_RIGHT_EVENT, (e) => this.moveRightHandler(e))
         $(phraseElement).bind(PHRASE_REMOVE_EVENT, (e) => this.removePhraseHandler(e))
         $(phraseElement).bind(PHRASE_SELECTED_EVENT, (e) => this.selectPhraseHandler(e))
+        $(phraseElement).bind(PHRASE_WIDTH_CHANGED_EVENT, (e) => this.widthChangedHandler())
         this.phraseElements.push(phraseElement)
 
         # подвинем текс в input'е
@@ -502,30 +536,11 @@ class @GrammarText
             if phraseElement.phrase.id != selectedPhraseElement.phrase.id
                 phraseElement.deselect()
 
-    _setInputFocus: ->
-        console.log ' this.lastFocusedInput', this.lastFocusedInput
-        if this.lastFocusedInput
-            this.lastFocusedInput.focus()
-            return
+    widthChangedHandler: (e) ->
+        this.refreshInputLeftPadding()
 
-        inputs = this.el.find("input")
-        for input in inputs
-            input = $(input)
-            # фокус на первый пустой инпут
-            if not input.val()
-                input.focus()
-                return
-        # если пустых нет, то на последний
-        input.focus()
-
-    _renderInputs: ->
-        inputs = this.el.find("input")
-        for input in inputs
-            input = $(input)
-            # расширим поле, чтобы было видно ровно столько символов, сколько ввели
-            # для этого создадим временный элемент (без этого при удалении символов scrollWidth не уменьшается)
-            tmpInput = $("<input style='width:10px' value='#{ input.val() }' />").appendTo('body')
-            scrollWidth = tmpInput.prop('scrollWidth')
-            tmpInput.remove()
-            input.width(scrollWidth)
-        this.width = this.el.outerWidth(true)
+        if this.phraseElements.length
+            left = this.phraseElements[0].getLeftPosition()
+            for phraseElement in this.phraseElements
+                phraseElement.setLeftPosition(left)
+                left += phraseElement.getWidth()
