@@ -7,57 +7,27 @@ createSuggestElement = (position) ->
 
 grammarInputPrepare = (grammar) ->
 
-    grammar.input.keydown (event) ->
-        console.log 'grammar', event.keyCode
+    grammar.input.focus (event) ->
+        grammar.clearSelection()
 
+    grammar.input.keydown (event) ->
+#        console.log 'grammar', event.keyCode
+
+        # Left
         if event.keyCode == 37
             # если что-то есть в поле ввода, то не реагиуем
             if grammar.input.val()
                 return
-
             grammar.selectLastPhrase()
 
-        else
-            grammar.clearSelection()
+        # backspace
+        else if event.keyCode == 8
+            # если что-то есть в поле ввода, то не реагиуем
+            if grammar.input.val()
+                return
+            event.preventDefault()  # чтобы браузер не отлистывал на предыдущую страницу
+            grammar.selectLastPhrase()
 
-#        # backspace
-#        if event.keyCode == 8
-#            # если что-то есть в поле ввода, то не реагиуем
-#            if grammar.input.val()
-#                return
-#
-#            selectedPhraseElement = grammar.getSelectedPhraseElement()
-#            if selectedPhraseElement
-#                grammar.removePhrase(selectedPhraseElement)
-#            else
-#                grammar.selectLastPhrase()
-#
-#        # Del
-#        else if event.keyCode == 46
-#            # если что-то есть в поле ввода, то не реагиуем
-#            if grammar.input.val()
-#                return
-#
-#            selectedPhraseElement = grammar.getSelectedPhraseElement()
-#            if selectedPhraseElement
-#                grammar.removePhrase(selectedPhraseElement)
-#
-#
-#        # Left
-#        else if event.keyCode == 37
-#            # если что-то есть в поле ввода, то не реагиуем
-#            if grammar.input.val()
-#                return
-#
-#            grammar.moveSelectionLeft()
-#
-#        # Right
-#        else if event.keyCode == 39
-#            # если что-то есть в поле ввода, то не реагиуем
-#            if grammar.input.val()
-#                return
-#
-#            grammar.moveSelectionRight()
 
 
 suggestInputPrepare = (suggest) ->
@@ -167,7 +137,12 @@ class Suggest
                 phraseItem.data(phrase)
                 phraseItem.click (event) =>
                     this.select($(event.target).data())
-                    this.input.focus()
+
+                    # меняем фокус, только если клик был не по инпуту
+                    tagName = $(':focus').prop('tagName')?.toLocaleLowerCase()
+                    if not tagName or tagName != 'input'
+                        this.input.focus()
+
                 this.element.find('.choices').append(phraseItem)
             # выберем первый элемент
             this.element.find('.choices li').first().addClass('selected')
@@ -212,6 +187,7 @@ class Suggest
 PHRASE_MOVE_LEFT_EVENT = 'PHRASE_MOVE_LEFT'
 PHRASE_MOVE_RIGHT_EVENT = 'PHRASE_MOVE_RIGHT'
 PHRASE_REMOVE_EVENT = 'PHRASE_REMOVE'
+PHRASE_SELECTED_EVENT = 'PHRASE_SELECTED'
 
 class PhraseElement
     constructor: (@phrase, position) ->
@@ -227,36 +203,75 @@ class PhraseElement
         this.el.css(position)
         this.width = this.el.outerWidth(true)
 
-        this.el.blur =>
-            this.deselect(true)
+        # если есть поля ввода, то сразу фокус на них
+        if this.hasParams
+            this.select()
+            # запоминаем инпут, на котором был фокус, чтобы потом возвращаться на него
+            this.lastFocusedInput = undefined
+            this.el.find('input').focus (e) =>
+                this.lastFocusedInput = $(e.target)
+
+        this.el.click (event) =>
+            # не меняем фокус, если клик был по инпуту фразы
+            targetTag = $(event.target)?.prop('tagName').toLocaleLowerCase()
+            doNotChangeFocusPosition = targetTag and targetTag == 'input'
+
+            setTimeout(
+                => this.select(doNotChangeFocusPosition)
+                100
+            )
 
         this.el.keydown (event) =>
-            console.log 'PhraseElement', event.keyCode
+            setTimeout(
+                => this._renderInputs()
+                100
+            )
+
+            target = $(event.target)
+            isTargetInput = target.prop('tagName').toLocaleLowerCase() == 'input'
 
             # Left
             if event.keyCode == 37
-                this.moveSelectionLeft()
+                processed = this.moveSelectionLeft()
+                if processed
+                    event.preventDefault()
+
             # Right
             else if event.keyCode == 39
-                this.moveSelectionRight()
+                processed = this.moveSelectionRight()
+                if processed
+                    event.preventDefault()
+
             # Del
             else if event.keyCode == 46
+                # если не пустой ввод, ничего не делаем
+                if isTargetInput and target.val().length
+                    return
                 this.moveSelectionRight()
                 this.remove()
+
             # backspace
             else if event.keyCode == 8
+                # если не пустой ввод, ничего не делаем
+                if isTargetInput and target.val().length
+                    return
+                event.preventDefault()  # чтобы браузер не отлистывал на предыдущую страницу
                 this.moveSelectionLeft()
                 this.remove()
 
-        this.el.click =>
-            this.select()
 
-#    getId: ->
-#        return "phrase_#{ this.phrase.id }"
-
-    select: ->
+    select: (doNotChangeFocusPosition) ->
         this.el.addClass('selected')
-        this.el.focus()
+        if this.hasParams
+            setInputFocus = not doNotChangeFocusPosition
+            if setInputFocus
+                this._setInputFocus(setInputFocus)
+        else
+            this.el.focus()
+
+        e = $.Event(PHRASE_SELECTED_EVENT, {phraseElement: this})
+        $(this).trigger(e)
+
 
     deselect: (noBlur)->
         this.el.removeClass('selected')
@@ -288,19 +303,51 @@ class PhraseElement
         $(this).trigger(e)
 
     moveSelectionLeft: ->
+        if this.hasParams
+            focusedInput = this.el.find('input:focus')
+
+            # если мы не в начале строки строки, игнорим
+            position = focusedInput.caret()
+            if position > 0
+                return false
+
+            # если есть предыдущий инпут, фокус на него
+            prevInput = focusedInput.prev()
+            if prevInput.length
+                prevInput.focus()
+                return true
+
         this.deselect()
         e = $.Event(PHRASE_MOVE_LEFT_EVENT, {phraseElement: this})
         $(this).trigger(e)
+        return true
 
     moveSelectionRight: ->
+        if this.hasParams
+            focusedInput = this.el.find('input:focus')
+
+            # если мы не в конце строки, игнорим
+            position = focusedInput.caret()
+            chars = focusedInput.val().length
+            if position < chars
+                return false
+
+            # если есть следующий инпут, фокус на него
+            nextInput = focusedInput.next()
+            if nextInput.length
+                nextInput.focus()
+                return true
+
         this.deselect()
         e = $.Event(PHRASE_MOVE_RIGHT_EVENT, {phraseElement: this})
         $(this).trigger(e)
+        return true
 
 
 class @GrammarText
     constructor: (input, @phrasesUrl) ->
         this.input = $(input)
+        this.originalInputLeftPadding = getLeftPadding(this.input)
 
         this.phrases = []
         this.suggestPhrases = []
@@ -323,8 +370,6 @@ class @GrammarText
             phraseElement.deselect()
 
     renderPhrase: (phrase) ->
-        this.clearSelection()
-
         # положение поля ввода
         position = this.input.offset()
         inputPadding = getLeftPadding(this.input)
@@ -336,21 +381,17 @@ class @GrammarText
         $(phraseElement).bind(PHRASE_MOVE_LEFT_EVENT, (e) => this.moveLeftHandler(e))
         $(phraseElement).bind(PHRASE_MOVE_RIGHT_EVENT, (e) => this.moveRightHandler(e))
         $(phraseElement).bind(PHRASE_REMOVE_EVENT, (e) => this.removePhraseHandler(e))
+        $(phraseElement).bind(PHRASE_SELECTED_EVENT, (e) => this.selectPhraseHandler(e))
         this.phraseElements.push(phraseElement)
 
         # подвинем текс в input'е
-        inputPadding = getLeftPadding(this.input)
-        phrasePadding = phraseElement.getWidth()
-        newInputPadding = inputPadding + phrasePadding
-        this.input.css('padding-left', newInputPadding)
+        this.refreshInputLeftPadding()
 
         # сохраним отрисованную фразу
         this.selectedPhrases.push(phrase)
 
         # удалим из списка доступных для автокомплита фразу
         this.refreshSuggestPhrases()
-
-#        this.selectLastPhrase()
 
     getSelectedPhraseElement: ->
         for phraseElement in this.phraseElements
@@ -382,8 +423,6 @@ class @GrammarText
             return
         lastPhraseElement = this.phraseElements[this.phraseElements.length-1]
         lastPhraseElement.select()
-        console.log 'selectLastPhrase', lastPhraseElement
-
 
     selectPhraseByIndex: (index) ->
         if not this.phraseElements.length
@@ -391,37 +430,11 @@ class @GrammarText
         phraseElement = this.phraseElements[index]
         phraseElement.select()
 
-#    moveSelectionLeft: ->
-#        index = this.getSelectedPhraseIndex()
-#
-#        if index == undefined
-#            index = this.phraseElements.length - 1
-#        else if index > 0
-#            index -= 1
-#        else
-#            index = 0
-#
-#        this.clearSelection()
-#        this.selectPhraseByIndex(index)
-#
-#    moveSelectionRight: ->
-#        lastIndex = this.phraseElements.length - 1
-#        index = this.getSelectedPhraseIndex()
-#
-#        if index == undefined
-#            index = 0
-##        else if index < lastIndex
-##            index += 1
-#        else
-##            index = lastIndex
-#            index += 1
-#
-#        this.clearSelection()
-#        if index < lastIndex
-##            this.input.blur()
-#            this.selectPhraseByIndex(index)
-##        else
-##            this.input.focus()
+    refreshInputLeftPadding: ->
+        padding = this.originalInputLeftPadding
+        for phraseElement in this.phraseElements
+            padding += phraseElement.getWidth()
+        this.input.css('padding-left', padding)
 
     refreshSuggestPhrases: ->
         this.suggestPhrases.length = 0
@@ -458,21 +471,16 @@ class @GrammarText
         else
             this.input.focus()
 
+
     removePhraseHandler: (e) ->
         phraseElement = e.phraseElement
 
         deleteIndex = this.getPhraseIndex(phraseElement.phrase)
-        console.log 'removePhraseHandler deleteIndex', deleteIndex
-#        if deleteIndex == undefined
-#            return
-
         this.phraseElements.splice(deleteIndex, 1)
 
         # уменьшим сдвиг поля ввода
         phrasePadding = phraseElement.getWidth()
-        inputPadding = getLeftPadding(this.input)
-        newInputPadding = inputPadding - phrasePadding
-        this.input.css('padding-left', newInputPadding)
+        this.refreshInputLeftPadding()
 
         # подвинем другие фразы
         for el in this.phraseElements.slice(deleteIndex)
@@ -488,11 +496,36 @@ class @GrammarText
         if not this.phraseElements.length
             this.input.focus()
 
+    selectPhraseHandler: (e) ->
+        selectedPhraseElement = e.phraseElement
+        for phraseElement in this.phraseElements
+            if phraseElement.phrase.id != selectedPhraseElement.phrase.id
+                phraseElement.deselect()
 
-#        # поставим выделение на друзую фразу
-#        if deleteIndex > 0
-#            selectedIndex = deleteIndex-1
-#        else
-#            selectedIndex = 0
-##        console.log this.phraseElements
-#        this.selectPhraseByIndex(selectedIndex)
+    _setInputFocus: ->
+        console.log ' this.lastFocusedInput', this.lastFocusedInput
+        if this.lastFocusedInput
+            this.lastFocusedInput.focus()
+            return
+
+        inputs = this.el.find("input")
+        for input in inputs
+            input = $(input)
+            # фокус на первый пустой инпут
+            if not input.val()
+                input.focus()
+                return
+        # если пустых нет, то на последний
+        input.focus()
+
+    _renderInputs: ->
+        inputs = this.el.find("input")
+        for input in inputs
+            input = $(input)
+            # расширим поле, чтобы было видно ровно столько символов, сколько ввели
+            # для этого создадим временный элемент (без этого при удалении символов scrollWidth не уменьшается)
+            tmpInput = $("<input style='width:10px' value='#{ input.val() }' />").appendTo('body')
+            scrollWidth = tmpInput.prop('scrollWidth')
+            tmpInput.remove()
+            input.width(scrollWidth)
+        this.width = this.el.outerWidth(true)
