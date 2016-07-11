@@ -1,9 +1,3 @@
-createPhraseElement = (phrase, position) ->
-    el = $("<div class='phrase'>#{ phrase.text }</div>")
-    el.appendTo('body')
-    el.css(position)
-    return el
-
 createSuggestElement = (position) ->
     el = $("<div class='suggest'><ul class='choices'></ul></div>")
     el.appendTo('body')
@@ -14,7 +8,7 @@ createSuggestElement = (position) ->
 grammarInputPrepare = (grammar) ->
 
     grammar.input.keydown (event) ->
-        console.log 'grammar', event.keyCode
+#        console.log 'grammar', event.keyCode
 
         # backspace
         if event.keyCode == 8
@@ -85,13 +79,17 @@ suggestInputPrepare = (suggest) ->
 
         # Down
         else if event.keyCode == 40
-            suggest.open()
-            suggest.moveSelectedDown()
+            if not suggest.isOpened
+                suggest.open()
+            else
+                suggest.moveSelectedDown()
 
         # Up
         else if event.keyCode == 38
-            suggest.open()
-            suggest.moveSelectedUp()
+            if not suggest.isOpened
+                suggest.open()
+            else
+                suggest.moveSelectedUp()
 
         else
             setTimeout(
@@ -155,12 +153,12 @@ class Suggest
         if phrases.length
             # отрисуем фразы
             for phrase in phrases
-                phraseElement = $("<li>#{ phrase.text }</li>")
-                phraseElement.data(phrase)
-                phraseElement.click (event) =>
+                phraseItem = $("<li>#{ phrase.text }</li>")
+                phraseItem.data(phrase)
+                phraseItem.click (event) =>
                     this.select($(event.target).data())
                     this.input.focus()
-                this.element.find('.choices').append(phraseElement)
+                this.element.find('.choices').append(phraseItem)
             # выберем первый элемент
             this.element.find('.choices li').first().addClass('selected')
         else
@@ -201,6 +199,39 @@ class Suggest
         prevElement.addClass('selected')
 
 
+class PhraseElement
+    constructor: (@phrase, position) ->
+        this.el = $("<div class='phrase'>#{ this.phrase.text }</div>")
+        this.el.appendTo('body')
+        this.el.css(position)
+
+    select: ->
+        this.el.addClass('selected')
+
+    deselect: ->
+        this.el.removeClass('selected')
+
+    isSelected: ->
+        return this.el.hasClass('selected')
+
+    getText: ->
+        return this.phrase.text
+
+    getWidth: ->
+        return this.el.outerWidth(true)
+
+    getLeftPosition: ->
+        rawLeft = this.el.css('left')
+        left = Number(rawLeft.substring(0, rawLeft.length-2))
+        return left
+
+    setLeftPosition: (left) ->
+        this.el.css('left', left)
+
+    remove: ->
+        this.el.remove()
+
+
 class @GrammarText
     constructor: (input, @phrasesUrl) ->
         this.input = $(input)
@@ -223,7 +254,7 @@ class @GrammarText
 
     clearSelection: ->
         for phraseElement in this.phraseElements
-            phraseElement.removeClass('selected')
+            phraseElement.deselect()
 
     renderPhrase: (phrase) ->
         this.clearSelection()
@@ -234,12 +265,12 @@ class @GrammarText
         position.left += inputPadding
 
         # нарисуем поверх него фразу
-        phraseElement = createPhraseElement(phrase, position)
+        phraseElement = new PhraseElement(phrase, position)
         this.phraseElements.push(phraseElement)
 
         # подвинем текс в input'е
         inputPadding = getLeftPadding(this.input)
-        phrasePadding = phraseElement.outerWidth(true)
+        phrasePadding = phraseElement.getWidth()
         newInputPadding = inputPadding + phrasePadding
         this.input.css('padding-left', newInputPadding)
 
@@ -253,7 +284,7 @@ class @GrammarText
 
     getSelectedPhraseElement: ->
         for phraseElement in this.phraseElements
-            if phraseElement.hasClass('selected')
+            if phraseElement.isSelected()
                 return phraseElement
 
     getSelectedPhraseIndex: ->
@@ -271,7 +302,7 @@ class @GrammarText
     removePhrase: (phraseElement) ->
         deleteIndex = undefined
         for el, i in this.phraseElements
-            if el.text() == phraseElement.text()
+            if el.getText() == phraseElement.getText()
                 deleteIndex = i
                 break
         if deleteIndex == undefined
@@ -280,20 +311,18 @@ class @GrammarText
         this.phraseElements.splice(deleteIndex, 1)
 
         # уменьшим сдвиг поля ввода
-        phrasePadding = phraseElement.outerWidth(true)
+        phrasePadding = phraseElement.getWidth()
         inputPadding = getLeftPadding(this.input)
         newInputPadding = inputPadding - phrasePadding
         this.input.css('padding-left', newInputPadding)
 
         # подвинем другие фразы
         for el in this.phraseElements.slice(deleteIndex)
-#            console.log deleteIndex, el.text(), el.css('left')
-            rawLeft = el.css('left')
-            left = Number(rawLeft.substring(0, rawLeft.length-2)) - phrasePadding
-            el.css('left', left)
+            left = el.getLeftPosition() - phrasePadding
+            el.setLeftPosition(left)
 
         # удалим фразу из выбранных
-        _.remove(this.selectedPhrases, {text: phraseElement.text()})
+        _.remove(this.selectedPhrases, {text: phraseElement.getText()})
 
         phraseElement.remove()
 
@@ -313,13 +342,13 @@ class @GrammarText
         if not this.phraseElements.length
             return
         lastPhraseElement = this.phraseElements[this.phraseElements.length-1]
-        lastPhraseElement.addClass('selected')
+        lastPhraseElement.select()
 
     selectPhraseByIndex: (index) ->
         if not this.phraseElements.length
             return
         phraseElement = this.phraseElements[index]
-        phraseElement.addClass('selected')
+        phraseElement.select()
 
     moveSelectionLeft: ->
         index = this.getSelectedPhraseIndex()
