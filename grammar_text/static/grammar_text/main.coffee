@@ -189,6 +189,7 @@ PHRASE_MOVE_RIGHT_EVENT = 'PHRASE_MOVE_RIGHT'
 PHRASE_REMOVE_EVENT = 'PHRASE_REMOVE'
 PHRASE_SELECTED_EVENT = 'PHRASE_SELECTED'
 PHRASE_WIDTH_CHANGED_EVENT = 'PHRASE_WIDTH_CHANGED'
+PHRASE_COMPLETE_EVENT = 'PHRASE_COMPLETE'
 
 class PhraseElement
     constructor: (@phrase, position) ->
@@ -227,6 +228,7 @@ class PhraseElement
                 => this._renderInputs()
                 100
             )
+#            console.log 'PhraseElement keydown', event.keyCode
 
             target = $(event.target)
             isTargetInput = target.prop('tagName').toLocaleLowerCase() == 'input'
@@ -260,6 +262,16 @@ class PhraseElement
                 this.moveSelectionLeft()
                 this.remove()
 
+            # enter
+            else if event.keyCode == 13
+                this.complete()
+                event.preventDefault()
+
+
+    complete: ->
+        this.deselect()
+        e = $.Event(PHRASE_COMPLETE_EVENT, {phraseElement: this})
+        $(this).trigger(e)
 
     select: (doNotChangeFocusPosition) ->
         this.el.addClass('selected')
@@ -413,6 +425,7 @@ class @GrammarText
         phraseElement = new PhraseElement(phrase, position)
         $(phraseElement).bind(PHRASE_MOVE_LEFT_EVENT, (e) => this.moveLeftHandler(e))
         $(phraseElement).bind(PHRASE_MOVE_RIGHT_EVENT, (e) => this.moveRightHandler(e))
+        $(phraseElement).bind(PHRASE_COMPLETE_EVENT, (e) => this.moveRightHandler(e))
         $(phraseElement).bind(PHRASE_REMOVE_EVENT, (e) => this.removePhraseHandler(e))
         $(phraseElement).bind(PHRASE_SELECTED_EVENT, (e) => this.selectPhraseHandler(e))
         $(phraseElement).bind(PHRASE_WIDTH_CHANGED_EVENT, (e) => this.widthChangedHandler())
