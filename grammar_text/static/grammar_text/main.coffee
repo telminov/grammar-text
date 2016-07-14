@@ -219,6 +219,7 @@ class PhraseElement
             if data
                 for input, i in this.el.find('input')
                     $(input).val(data[i])
+                this._renderInputs()
 
         this.el.click (event) =>
             # не меняем фокус, если клик был по инпуту фразы
@@ -434,11 +435,14 @@ class @GrammarText
         dataJSON = this.input.val()
         if dataJSON
             this.input.val('')
+            this.valueInput.val(dataJSON)
             data = JSON.parse(dataJSON)
             for phraseText, phraseData of data
                 phrase = {'text': phraseText}
                 this.renderPhrase(phrase, phraseData)
 
+        this.input.parents().find('form').submit =>
+            this.refreshInputValue()
 
     getData: ->
         data = {}
@@ -536,6 +540,11 @@ class @GrammarText
             if not selected
                 this.suggestPhrases.push(phrase)
 
+    refreshInputValue: ->
+        data = this.getData()
+        dataJSON = JSON.stringify(data)
+        this.valueInput.val(dataJSON)
+
 
     moveLeftHandler: (e) ->
         phrase = e.phraseElement.phrase
@@ -602,6 +611,4 @@ class @GrammarText
                 left += phraseElement.getWidth()
 
     deselectHandler: (e) ->
-        data = this.getData()
-        dataJSON = JSON.stringify(data)
-        this.valueInput.val(dataJSON)
+        this.refreshInputValue()

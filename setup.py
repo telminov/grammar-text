@@ -9,7 +9,7 @@ def get_requires():
 
 setup(
     name='grammar_text',
-    version='0.0.1',
+    version='0.0.3',
     description='Text with grammar.',
     author='Telminov Sergey',
     author_email='sergey@telminov.ru',

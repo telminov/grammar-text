@@ -237,6 +237,7 @@
             input = ref[i];
             $(input).val(data[i]);
           }
+          this._renderInputs();
         }
       }
       this.el.click((function(_this) {
@@ -490,6 +491,7 @@
       dataJSON = this.input.val();
       if (dataJSON) {
         this.input.val('');
+        this.valueInput.val(dataJSON);
         data = JSON.parse(dataJSON);
         for (phraseText in data) {
           phraseData = data[phraseText];
@@ -499,6 +501,11 @@
           this.renderPhrase(phrase, phraseData);
         }
       }
+      this.input.parents().find('form').submit((function(_this) {
+        return function() {
+          return _this.refreshInputValue();
+        };
+      })(this));
     }
 
     GrammarText.prototype.getData = function() {
@@ -675,6 +682,13 @@
       return results;
     };
 
+    GrammarText.prototype.refreshInputValue = function() {
+      var data, dataJSON;
+      data = this.getData();
+      dataJSON = JSON.stringify(data);
+      return this.valueInput.val(dataJSON);
+    };
+
     GrammarText.prototype.moveLeftHandler = function(e) {
       var nextIndex, nextPhraseElement, phrase, phraseIndex;
       phrase = e.phraseElement.phrase;
@@ -757,10 +771,7 @@
     };
 
     GrammarText.prototype.deselectHandler = function(e) {
-      var data, dataJSON;
-      data = this.getData();
-      dataJSON = JSON.stringify(data);
-      return this.valueInput.val(dataJSON);
+      return this.refreshInputValue();
     };
 
     return GrammarText;
