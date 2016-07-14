@@ -303,6 +303,7 @@ class PhraseElement
         doBlur = !noBlur
         if doBlur
             this.el.blur()
+            this.getInputs().blur()
 
     isSelected: ->
         return this.el.hasClass('selected')
@@ -440,6 +441,7 @@ class @GrammarText
             for phraseText, phraseData of data
                 phrase = {'text': phraseText}
                 this.renderPhrase(phrase, phraseData)
+            this.clearSelection()
 
         this.input.parents().find('form').submit =>
             this.refreshInputValue()

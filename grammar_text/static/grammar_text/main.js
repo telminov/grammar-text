@@ -324,7 +324,8 @@
       $(this).trigger(e);
       doBlur = !noBlur;
       if (doBlur) {
-        return this.el.blur();
+        this.el.blur();
+        return this.getInputs().blur();
       }
     };
 
@@ -500,6 +501,7 @@
           };
           this.renderPhrase(phrase, phraseData);
         }
+        this.clearSelection();
       }
       this.input.parents().find('form').submit((function(_this) {
         return function() {
