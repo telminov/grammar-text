@@ -188,6 +188,7 @@ PHRASE_MOVE_LEFT_EVENT = 'PHRASE_MOVE_LEFT'
 PHRASE_MOVE_RIGHT_EVENT = 'PHRASE_MOVE_RIGHT'
 PHRASE_REMOVE_EVENT = 'PHRASE_REMOVE'
 PHRASE_SELECTED_EVENT = 'PHRASE_SELECTED'
+PHRASE_DESELECTED_EVENT = 'PHRASE_DESELECTED'
 PHRASE_WIDTH_CHANGED_EVENT = 'PHRASE_WIDTH_CHANGED'
 PHRASE_COMPLETE_EVENT = 'PHRASE_COMPLETE'
 
@@ -289,6 +290,9 @@ class PhraseElement
     deselect: (noBlur)->
         this.el.removeClass('selected')
 
+        e = $.Event(PHRASE_DESELECTED_EVENT, {phraseElement: this})
+        $(this).trigger(e)
+
         doBlur = !noBlur
         if doBlur
             this.el.blur()
@@ -356,13 +360,24 @@ class PhraseElement
         $(this).trigger(e)
         return true
 
+    getInputs: ->
+        return this.el.find("input")
+
+    getData: ->
+        if this.hasParams
+            data = []
+            for input in this.getInputs()
+                data.push($(input).val())
+            return data
+        else
+            return 1
+
     _setInputFocus: ->
         if this.lastFocusedInput
             this.lastFocusedInput.focus()
             return
 
-        inputs = this.el.find("input")
-        for input in inputs
+        for input in this.getInputs()
             input = $(input)
             # фокус на первый пустой инпут
             if not input.val()
@@ -372,8 +387,7 @@ class PhraseElement
         input.focus()
 
     _renderInputs: ->
-        inputs = this.el.find("input")
-        for input in inputs
+        for input in this.getInputs()
             input = $(input)
             # расширим поле, чтобы было видно ровно столько символов, сколько ввели
             # для этого создадим временный элемент (без этого при удалении символов scrollWidth не уменьшается)
@@ -404,6 +418,19 @@ class @GrammarText
         this.phraseElements = []
         grammarInputPrepare(this)
 
+        # скрытый инпут со значением, передаваемым на сервер
+        inputName = this.input.prop('name')
+        this.input.removeProp('name')
+        this.valueInput = $("<input type='hidden' name='#{ inputName }' />")
+        this.valueInput.insertAfter(this.input)
+
+
+    getData: ->
+        data = {}
+        for phraseElement in this.phraseElements
+            data[phraseElement.getText()] = phraseElement.getData()
+        return data
+
     loadPhrases: ->
         $.get this.phrasesUrl, (result) =>
             for phrase in result
@@ -429,6 +456,7 @@ class @GrammarText
         $(phraseElement).bind(PHRASE_REMOVE_EVENT, (e) => this.removePhraseHandler(e))
         $(phraseElement).bind(PHRASE_SELECTED_EVENT, (e) => this.selectPhraseHandler(e))
         $(phraseElement).bind(PHRASE_WIDTH_CHANGED_EVENT, (e) => this.widthChangedHandler())
+        $(phraseElement).bind(PHRASE_DESELECTED_EVENT, (e) => this.deselectHandler(e))
         this.phraseElements.push(phraseElement)
 
         # подвинем текс в input'е
@@ -557,3 +585,8 @@ class @GrammarText
             for phraseElement in this.phraseElements
                 phraseElement.setLeftPosition(left)
                 left += phraseElement.getWidth()
+
+    deselectHandler: (e) ->
+        data = this.getData()
+        dataJSON = JSON.stringify(data)
+        this.valueInput.val(dataJSON)
