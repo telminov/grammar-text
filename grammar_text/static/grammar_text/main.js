@@ -210,8 +210,8 @@
   PHRASE_COMPLETE_EVENT = 'PHRASE_COMPLETE';
 
   PhraseElement = (function() {
-    function PhraseElement(phrase1, position) {
-      var contentHtml;
+    function PhraseElement(phrase1, position, data) {
+      var contentHtml, i, input, j, len, ref;
       this.phrase = phrase1;
       this.hasParams = this.phrase.text.indexOf('_') !== -1;
       contentHtml = this.phrase.text;
@@ -231,11 +231,18 @@
             return _this.lastFocusedInput = $(e.target);
           };
         })(this));
+        if (data) {
+          ref = this.el.find('input');
+          for (i = j = 0, len = ref.length; j < len; i = ++j) {
+            input = ref[i];
+            $(input).val(data[i]);
+          }
+        }
       }
       this.el.click((function(_this) {
         return function(event) {
-          var doNotChangeFocusPosition, ref, targetTag;
-          targetTag = (ref = $(event.target)) != null ? ref.prop('tagName').toLocaleLowerCase() : void 0;
+          var doNotChangeFocusPosition, ref1, targetTag;
+          targetTag = (ref1 = $(event.target)) != null ? ref1.prop('tagName').toLocaleLowerCase() : void 0;
           doNotChangeFocusPosition = targetTag && targetTag === 'input';
           return setTimeout(function() {
             return _this.select(doNotChangeFocusPosition);
@@ -461,7 +468,7 @@
 
   this.GrammarText = (function() {
     function GrammarText(input, phrasesUrl) {
-      var inputName;
+      var data, dataJSON, inputName, phrase, phraseData, phraseText;
       this.phrasesUrl = phrasesUrl;
       this.input = $(input);
       this.originalInputLeftPadding = getLeftPadding(this.input);
@@ -480,6 +487,18 @@
       this.input.removeProp('name');
       this.valueInput = $("<input type='hidden' name='" + inputName + "' />");
       this.valueInput.insertAfter(this.input);
+      dataJSON = this.input.val();
+      if (dataJSON) {
+        this.input.val('');
+        data = JSON.parse(dataJSON);
+        for (phraseText in data) {
+          phraseData = data[phraseText];
+          phrase = {
+            'text': phraseText
+          };
+          this.renderPhrase(phrase, phraseData);
+        }
+      }
     }
 
     GrammarText.prototype.getData = function() {
@@ -517,13 +536,13 @@
       return results;
     };
 
-    GrammarText.prototype.renderPhrase = function(phrase) {
+    GrammarText.prototype.renderPhrase = function(phrase, data) {
       var inputPadding, phraseElement, position;
       position = this.input.offset();
       inputPadding = getLeftPadding(this.input);
       position.left += inputPadding;
       position.top -= 4;
-      phraseElement = new PhraseElement(phrase, position);
+      phraseElement = new PhraseElement(phrase, position, data);
       $(phraseElement).bind(PHRASE_MOVE_LEFT_EVENT, (function(_this) {
         return function(e) {
           return _this.moveLeftHandler(e);
@@ -712,7 +731,7 @@
       results = [];
       for (j = 0, len = ref.length; j < len; j++) {
         phraseElement = ref[j];
-        if (phraseElement.phrase.id !== selectedPhraseElement.phrase.id) {
+        if (phraseElement.phrase.text !== selectedPhraseElement.phrase.text) {
           results.push(phraseElement.deselect());
         } else {
           results.push(void 0);

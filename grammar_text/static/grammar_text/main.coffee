@@ -193,7 +193,7 @@ PHRASE_WIDTH_CHANGED_EVENT = 'PHRASE_WIDTH_CHANGED'
 PHRASE_COMPLETE_EVENT = 'PHRASE_COMPLETE'
 
 class PhraseElement
-    constructor: (@phrase, position) ->
+    constructor: (@phrase, position, data) ->
         this.hasParams = this.phrase.text.indexOf('_') != -1
 
         contentHtml = this.phrase.text
@@ -209,10 +209,16 @@ class PhraseElement
         # если есть поля ввода, то сразу фокус на них
         if this.hasParams
             this.select()
+
             # запоминаем инпут, на котором был фокус, чтобы потом возвращаться на него
             this.lastFocusedInput = undefined
             this.el.find('input').focus (e) =>
                 this.lastFocusedInput = $(e.target)
+
+            # проставим значения
+            if data
+                for input, i in this.el.find('input')
+                    $(input).val(data[i])
 
         this.el.click (event) =>
             # не меняем фокус, если клик был по инпуту фразы
@@ -424,6 +430,15 @@ class @GrammarText
         this.valueInput = $("<input type='hidden' name='#{ inputName }' />")
         this.valueInput.insertAfter(this.input)
 
+        # отрисуем если есть значение для поля
+        dataJSON = this.input.val()
+        if dataJSON
+            this.input.val('')
+            data = JSON.parse(dataJSON)
+            for phraseText, phraseData of data
+                phrase = {'text': phraseText}
+                this.renderPhrase(phrase, phraseData)
+
 
     getData: ->
         data = {}
@@ -441,7 +456,7 @@ class @GrammarText
         for phraseElement in this.phraseElements
             phraseElement.deselect()
 
-    renderPhrase: (phrase) ->
+    renderPhrase: (phrase, data) ->
         # положение поля ввода
         position = this.input.offset()
         inputPadding = getLeftPadding(this.input)
@@ -449,7 +464,7 @@ class @GrammarText
         position.top -= 4
 
         # нарисуем поверх него фразу
-        phraseElement = new PhraseElement(phrase, position)
+        phraseElement = new PhraseElement(phrase, position, data)
         $(phraseElement).bind(PHRASE_MOVE_LEFT_EVENT, (e) => this.moveLeftHandler(e))
         $(phraseElement).bind(PHRASE_MOVE_RIGHT_EVENT, (e) => this.moveRightHandler(e))
         $(phraseElement).bind(PHRASE_COMPLETE_EVENT, (e) => this.moveRightHandler(e))
@@ -574,7 +589,7 @@ class @GrammarText
     selectPhraseHandler: (e) ->
         selectedPhraseElement = e.phraseElement
         for phraseElement in this.phraseElements
-            if phraseElement.phrase.id != selectedPhraseElement.phrase.id
+            if phraseElement.phrase.text != selectedPhraseElement.phrase.text
                 phraseElement.deselect()
 
     widthChangedHandler: (e) ->
