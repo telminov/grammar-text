@@ -1,0 +1,14 @@
+{{ input_html }}
+<script>
+    (function() {
+        var phrasesUrl = '{{ phrases_url }}';
+        var inputId = '{{ input_id }}';
+        var input = document.getElementById(inputId);
+
+        var loadHandler = function(){
+            var g = new GrammarText(input, phrasesUrl);
+            g.loadPhrases();
+        };
+        window.addEventListener('DOMContentLoaded', loadHandler, false);
+    })()
+</script>

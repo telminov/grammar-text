@@ -4,5 +4,5 @@ from . import views
 
 
 router = routers.SimpleRouter()
-router.register(r'phrases', views.PhraseViewset)
+router.register(r'phrases', views.PhraseViewset, base_name='phrases')
 urlpatterns = router.urls
