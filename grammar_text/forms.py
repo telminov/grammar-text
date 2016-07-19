@@ -5,6 +5,8 @@ from django.template.loader import render_to_string
 
 
 class PhraseWidget(forms.TextInput):
+    class Media:
+        js = ('grammar_text/main.js', )
 
     def render(self, name, value, attrs=None):
         c = {
@@ -14,3 +16,5 @@ class PhraseWidget(forms.TextInput):
         }
         html = render_to_string('grammar_text/widget.html', c)
         return html
+
+
