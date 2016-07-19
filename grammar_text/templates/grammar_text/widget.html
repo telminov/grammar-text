@@ -1,7 +1,7 @@
 {{ input_html }}
 <script>
     (function() {
-        var phrasesUrl = '{{ phrases_url }}';
+        var phrasesUrl = '{{ phrases_url|safe }}';
         var inputId = '{{ input_id }}';
         var input = document.getElementById(inputId);
 
